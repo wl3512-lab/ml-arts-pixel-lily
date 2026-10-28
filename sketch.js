@@ -1,5 +1,7 @@
 // Starting point: "Training a Webcam Image Classifier with Convolutional Layers"
-// by jackbdu, https://editor.p5js.org/jackbdu/sketches/7Y6VDvUO6 (copied unchanged)
+// by jackbdu, https://editor.p5js.org/jackbdu/sketches/7Y6VDvUO6
+// Changed: 3 labels instead of A/B, the CNN only sees the right half of the camera,
+// pixels centered on 0 and batchSize 8 so training stops getting stuck on one label.
 // References:
 // https://editor.p5js.org/ima_ml/sketches/bL6jONrFQ
 
@@ -19,27 +21,26 @@ const options = {
 };
 const trainingOptions = {
   epochs: 64,
-  batchSize: 4,
+  batchSize: 8,
 };
 
 let statusElement;
-let aCount = 0;
-let bCount = 0;
-let aCountElement;
-let bCountElement;
+const labels = ["open", "fist", "none"];
+const counts = { open: 0, fist: 0, none: 0 };
+let countsElement;
 
 function preload() {
   classifier = ml5.neuralNetwork(options);
 }
 
 function setup() {
-  createCanvas(400, 400);
+  createCanvas(640, 480);
   pixelDensity(1);
-  statusElement = createP("Add examples for A and B, then Train!").style('font-size: 2em;');;
-  createButton("Add Example A").mousePressed(addExampleA);
-  aCountElement = createP(aCount);
-  createButton("Add Example B").mousePressed(addExampleB);
-  bCountElement = createP(bCount);
+  statusElement = createP("Right hand on the right side: add open, fist and none, then Train!").style('font-size: 2em;');
+  for (const label of labels) {
+    createButton(`Add ${label}`).mousePressed(() => addExample(label));
+  }
+  countsElement = createP("open 0 · fist 0 · none 0");
   createButton("Train").mousePressed(train);
 
   video = createCapture(VIDEO, { flipped: true });
@@ -53,32 +54,28 @@ function setup() {
 
 function draw() {
   image(video, 0, 0, width, height);
+  // the right half is what the CNN sees
+  stroke(255, 105, 180);
+  strokeWeight(3);
+  line(width / 2, 0, width / 2, height);
 }
 
-function addExampleA() {
-  const inputs = getNormalizedPixels();
-  const outputs = ['a'];
-  classifier.addData(inputs, outputs);
-  aCount = aCount + 1;
-  aCountElement.html(aCount);
-}
-
-function addExampleB() {
-  const inputs = getNormalizedPixels();
-  const outputs = ['b'];
-  classifier.addData(inputs, outputs);
-  bCount = bCount + 1;
-  bCountElement.html(bCount);
+function addExample(label) {
+  classifier.addData(getNormalizedPixels(), [label]);
+  counts[label] += 1;
+  countsElement.html(`open ${counts.open} · fist ${counts.fist} · none ${counts.none}`);
 }
 
 function getNormalizedPixels() {
-  const img = get();
+  // only the right half of the camera, where the stem hand goes
+  const img = video.get(video.width / 2, 0, video.width / 2, video.height);
   img.pixelDensity(1);
   img.resize(imageWidth, imageHeight);
   img.loadPixels();
   const normalizedPixels = [];
   for (let i = 0; i < pixelsNum * imageChannels; i++) {
-    normalizedPixels.push(img.pixels[i] / 255);
+    // -0.5..0.5 instead of 0..1: with 0..1 the network often never left coin-flip
+    normalizedPixels.push(img.pixels[i] / 255 - 0.5);
   }
   return normalizedPixels;
 }
