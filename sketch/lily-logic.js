@@ -35,6 +35,9 @@
     { x: -15, height: 16, size: 0.5 },
     { x: 17, height: 20, size: 0.5 },
   ];
+  // a fist held until the garden is fully wilted kills it; the next open palm
+  // starts it again from a sprout as the next kind of flower, round and round
+  const SPECIES = ["lily", "tulip", "daisy", "sunflower", "rose", "morning glory"];
   const MEADOW_START = 60; // main stem height before the first one sprouts
   const MEADOW_GROW_TIME = 3;
   const MEADOW_NEXT = 0.4; // the next one starts when this one is 40% grown
@@ -106,6 +109,9 @@
       sun: 0, // 0 = pale and unlit, 1 = blazing
       sideGrowth: SIDE_FLOWERS.map(() => 0), // 0 = not sprouted, 1 = fully open
       meadow: MEADOW.map(() => 0), // same, for the lilies in the grass
+      species: 0, // index into SPECIES
+      dead: false,
+      deaths: 0,
     };
   }
 
@@ -133,11 +139,29 @@
     return out;
   }
 
-  // advance the plant by dt seconds. Returns { plucked } so the drawing code
-  // can spawn falling petals.
+  // the dead garden goes, and a sprout of the next kind of flower comes up
+  function rebirth(plant) {
+    plant.species = (plant.species + 1) % SPECIES.length;
+    plant.dead = false;
+    plant.height = STEM_MIN;
+    plant.wilt = 0;
+    plant.bloom = 0;
+    plant.bud = 0;
+    plant.pinchHistory = [];
+    plant.sideGrowth = SIDE_FLOWERS.map(() => 0);
+    plant.meadow = MEADOW.map(() => 0);
+  }
+
+  // advance the plant by dt seconds. Returns { plucked, reborn } so the
+  // drawing code can spawn falling petals and name the new flower.
   function step(plant, input, dt) {
     plant.time += dt;
-    const events = { plucked: false };
+    const events = { plucked: false, reborn: false };
+
+    if (input.stem === "open" && plant.dead) {
+      rebirth(plant);
+      events.reborn = true;
+    }
 
     // stem hand, from the CNN
     if (input.stem === "open") {
@@ -159,6 +183,10 @@
       }
     } else if (input.stem === "fist") {
       plant.wilt = Math.min(1, plant.wilt + WILT_SPEED * dt);
+      if (plant.wilt >= 1 && !plant.dead) {
+        plant.dead = true;
+        plant.deaths += 1;
+      }
       plant.sun = Math.max(0, plant.sun - SUN_FADE_FIST * dt);
     } else {
       plant.sun = Math.max(0, plant.sun - SUN_FADE * dt);
@@ -191,7 +219,7 @@
 
   const api = {
     pinchRatio, pinchToOpen, fingerReach, palmState, petalDissolve, createPlant, step, leaves, leafCount, sideFlowers,
-    meadowFlowers, STEM_MIN, STEM_MAX, SNAP_WINDOW, SIDE_FLOWERS, MEADOW, MEADOW_START, PETAL_STAY, PETAL_DISSOLVE,
+    meadowFlowers, SPECIES, STEM_MIN, STEM_MAX, SNAP_WINDOW, SIDE_FLOWERS, MEADOW, MEADOW_START, PETAL_STAY, PETAL_DISSOLVE,
   };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.LilyLogic = api;

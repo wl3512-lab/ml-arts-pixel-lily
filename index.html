@@ -47,7 +47,7 @@
   <header>
     <div class="meta">Lucy Liu · Intro to Machine Learning for the Arts<br>Assignment 08 · Convolutional Neural Networks · October 28, 2026</div>
     <h1>Pixel Lily</h1>
-    <p class="lead">A pink stargazer lily in chunky pixel art, grown with two hands. My left hand pinches the flower open, and snapping the pinch shut plucks the petals. My right hand looks after the stem: an open palm grows it and adds leaves, a fist wilts it. The stem hand is read by a convolutional neural network that I train in the browser on pictures of my own hand.</p>
+    <p class="lead">A pink stargazer lily in chunky pixel art, grown with two hands. My left hand pinches the flower open, and snapping the pinch shut plucks the petals. My right hand looks after the stem: an open palm grows it and adds leaves, a fist wilts it. Hold the fist until everything dies, and the next open palm grows a different kind of flower, six kinds in turn. The stem hand is read by a convolutional neural network that I train in the browser on pictures of my own hand.</p>
     <nav class="actions" aria-label="Project links">
       <a class="button primary" href="sketch/">Open the p5.js sketch ↗</a>
       <a class="button" href="https://github.com/wl3512-lab/ml-arts-pixel-lily">Code &amp; tests</a>
@@ -70,7 +70,8 @@
           <tr><td>left</td><td>snap the pinch shut</td><td>the six petals fall off and flutter to the grass, where they lie for 10 s and then dissolve. A new bud grows back in 3 s</td><td>handPose</td></tr>
           <tr><td>right</td><td>open palm</td><td>the stem grows taller, with a new leaf every 15 pixels, and recovers from wilting. The sun lights up</td><td>my CNN</td></tr>
           <tr><td>right</td><td>keep the palm open</td><td>three little lilies sprout off the stem, then six more come up out of the grass one after another</td><td>my CNN</td></tr>
-          <tr><td>right</td><td>fist</td><td>wilts: the stems bend over, everything turns brown, the flowers droop, and the sun goes pale</td><td>my CNN</td></tr>
+          <tr><td>right</td><td>fist</td><td>wilts: the stems bend over, everything turns brown, the flowers droop, and the sun goes pale. Opening in time revives it</td><td>my CNN</td></tr>
+          <tr><td>right</td><td>fist until it's all dead, then open</td><td>the dead flower's petals fall and a sprout of the <em>next</em> kind comes up: lily → tulip → daisy → sunflower → rose → morning glory → lily again</td><td>my CNN</td></tr>
         </tbody>
       </table>
       <p><b>Why two different models?</b> The class example is a <em>classifier</em>. It answers “which of my labels is this picture?”, so it fits the stem hand well: open, fist, or no hand at all. A pinch is a distance, though, not a category. A classifier can't tell me <em>how</em> open my fingers are, so the flower hand uses handPose keypoints (thumb tip to index tip, divided by the palm length so it reads the same near or far from the camera). Closing slowly closes the flower. Only a <em>snap</em>, from at least 0.55 open to almost touching within 0.4 seconds, plucks the petals.</p>
@@ -87,6 +88,9 @@
         <figure><img src="media/08-meadow.jpg" alt="A full meadow: the tall main lily with three little lilies on its stem, six more lilies in the grass at different heights, and a glowing pixel sun" loading="lazy"><figcaption>Palm open for about 14 s: a gold sun, three little lilies on the stem and the whole meadow in bloom</figcaption></figure>
         <figure><img src="media/08b-meadow-wilt.jpg" alt="The same meadow wilted: every stem bent over and brown, dusty mauve flowers hanging down, a pale sun" loading="lazy"><figcaption>Then a fist for 2 s: everything droops and the sun goes pale</figcaption></figure>
       </div>
+      <p><b>Six kinds of flower.</b> Each time a fist kills the garden, the next open palm starts it again as a different flower. The lily has its own drawing. The other five are rings of petals that start bunched into a green bud and spread out as they open, all the way round or (for the tulip) into a cup, some around a speckled center disc. The rose stacks three rings. The new kind's name shows above the garden for a few seconds.</p>
+      <figure><img src="media/10-six-flowers.jpg" alt="Six gardens in full bloom: pink stargazer lilies, coral tulips, white daisies with yellow centers, sunflowers with brown centers, layered pink roses, and blue morning glories with white stars" loading="lazy"><figcaption>The six kinds, each in full bloom with its little flowers and meadow: lily, tulip, daisy, sunflower, rose, morning glory.</figcaption></figure>
+      <figure style="margin-top:14px;max-width:300px"><img src="media/11-reborn.jpg" alt="A small green sprout with a bud, dusty dead petals falling beside it, and the words tulip at the top" loading="lazy"><figcaption>Right after a death: the dead lily's petals fall and a tulip sprout comes up.</figcaption></figure>
     </div>
   </section>
 
@@ -143,7 +147,7 @@ live guesses matching the clip: 29/30
 mean crop brightness: open 0.033 · fist −0.042 · none −0.058</pre>
       <p>The brightness line proves the crop is the correct half: the discs only exist on the stem-hand side, and the crops get brighter with disc size. If I had cropped the wrong half, all three would read the same.</p>
       <p><b>The plant, with real mouse and key events.</b> A script drove headless Chrome through every state (mouse mode: drag across the garden to pinch, hold O / F for the stem). Holding O for 4 s grew the stem 22 → 80 px and added leaves. Dragging right bloomed it to 0.95. Closing slowly to 0.4 plucked nothing. A snap plucked once, and the 6 petals fell and landed. Holding F for 2.2 s wilted it fully, and O brought it back. Log: <a href="https://github.com/wl3512-lab/ml-arts-pixel-lily/blob/main/tests/results/mouse-run-2026-10-28.txt">mouse-run-2026-10-28.txt</a>.</p>
-      <p><b>The rules.</b> 16 node tests on <code>lily-logic.js</code>: the pinch reads the same anywhere in the frame and at any distance, broken (NaN) hands are ignored, slow closing never plucks, snapping plucks exactly once and regrows, a snap from a closed flower does nothing, open grows up to a limit, a fist wilts without shrinking, no hands means nothing changes, the handPose stand-in tells open from fist, the sun rises and fades, the little lilies and the meadow sprout in order and only with an open palm, and fallen petals dissolve on time.</p>
+      <p><b>The rules.</b> 19 node tests on <code>lily-logic.js</code>: the pinch reads the same anywhere in the frame and at any distance, broken (NaN) hands are ignored, slow closing never plucks, snapping plucks exactly once and regrows, a snap from a closed flower does nothing, open grows up to a limit, a fist wilts without shrinking, no hands means nothing changes, the handPose stand-in tells open from fist, the sun rises and fades, the little lilies and the meadow sprout in order and only with an open palm, fallen petals dissolve on time, a fist only switches the flower once everything is dead (and only once per death), and the six kinds come round in order.</p>
       <p class="note">Not tested yet: a live run with my own two hands. Everything above uses a fake camera, the mouse, or generated pictures.</p>
     </div>
   </section>
@@ -167,8 +171,8 @@ mean crop brightness: open 0.033 · fist −0.042 · none −0.058</pre>
       <ul>
         <li>The CNN learns my room, my lighting and my sleeves along with my hand. Someone else probably has to train their own, which is why training happens right on the page.</li>
         <li>If I save a model trained on my hand into <code>sketch/model/</code>, the sketch loads it by itself, so a demo can skip training.</li>
-        <li>handPose could also tell open from fist using keypoints. Comparing that against the CNN on the same hand would show what learning from raw pixels gets right and wrong.</li>
-        <li>Next: more flowers, a different one per hand shape (a new label), and sending bloom and wilt to TouchDesigner like my Assignment 6.</li>
+        <li>The handPose stand-in already tells open from fist from keypoints, with rules I wrote. Comparing it against the trained CNN on the same hand would show what learning from raw pixels gets right and wrong.</li>
+        <li>Next: choose the flower with a hand shape (a new CNN label per kind) instead of cycling through them, and send bloom and wilt to TouchDesigner like my Assignment 6.</li>
       </ul>
     </div>
   </section>
@@ -182,7 +186,7 @@ mean crop brightness: open 0.033 · fist −0.042 · none −0.058</pre>
         <li><a href="https://docs.ml5js.org/#/reference/neural-network">ml5.neuralNetwork</a> and <a href="https://docs.ml5js.org/#/reference/handpose">ml5.handPose</a> references; the sketch pins ml5.js 1.4.0 and p5.js 1.11.10</li>
         <li>Pixel font: <a href="https://fonts.google.com/specimen/Silkscreen">Silkscreen</a> by Jason Kottke (Google Fonts)</li>
       </ul>
-      <p class="small"><b>AI assistance:</b> Claude (Anthropic), October 28, 2026, diagnosed why the class example only guessed one label, ran the training experiments, and wrote the sketch, the plant logic and its tests, the automated browser checks (including the generated camera clip), the meadow, and this write-up. The sun, the little lilies on the stem, the handPose stand-in and the dissolving petals were added later the same day, also AI-assisted. The lily, its two-hand controls and the pixel style are my idea. No live test with my own hands or completion of the assigned reading is claimed here.</p>
+      <p class="small"><b>AI assistance:</b> Claude (Anthropic), October 28, 2026, diagnosed why the class example only guessed one label, ran the training experiments, and wrote the sketch, the plant logic and its tests, the automated browser checks (including the generated camera clip), the meadow, the six kinds of flower, and this write-up. The sun, the little lilies on the stem, the handPose stand-in and the dissolving petals were added later the same day, also AI-assisted. The lily, its two-hand controls and the pixel style are my idea. No live test with my own hands or completion of the assigned reading is claimed here.</p>
     </div>
   </section>
 

@@ -58,6 +58,7 @@ let stemHand = null;
 let falling = [];
 let fallen = [];
 let lastHead = null; // where the main flower was drawn, so plucked petals start there
+let speciesShownAt = -Infinity; // when the current kind of flower was announced
 
 let garden, gctx, skyLayer;
 let gardenRect = { x: 0, y: 0, s: 1 };
@@ -371,12 +372,17 @@ function draw() {
   lastInput = readInputs();
   const events = LilyLogic.step(plant, lastInput, dt);
   if (events.plucked) dropPetals();
+  if (events.reborn) {
+    dropPetals(); // the dead flower's petals fall as the new sprout comes up
+    speciesShownAt = millis();
+  }
   updatePetals(dt);
 
   renderGarden();
   background("#1f1226");
   placeGarden();
   image(garden, gardenRect.x, gardenRect.y, GW * gardenRect.s, GH * gardenRect.s);
+  drawSpeciesName();
   if (cameraReady()) drawCamera();
   if (frameCount % 6 === 0) updateReadout();
 }
@@ -457,8 +463,10 @@ function updateReadout() {
     `pinch ${pinch} → bloom ${p.bloom.toFixed(2)}${p.bud < 1 ? ` (regrowing ${Math.round(p.bud * 100)}%)` : ""}\n` +
     `stem hand: ${cnn} → ${lastInput.stem}\n` +
     `stem ${Math.round(p.height)}/${LilyLogic.STEM_MAX} · leaves ${LilyLogic.leafCount(p.height)} · wilt ${p.wilt.toFixed(2)} · plucked ${p.plucks}×\n` +
-    `sun ${p.sun.toFixed(2)} · little lilies ${LilyLogic.sideFlowers(p).length}/${LilyLogic.SIDE_FLOWERS.length}` +
-    ` · meadow ${LilyLogic.meadowFlowers(p).length}/${LilyLogic.MEADOW.length}`;
+    `sun ${p.sun.toFixed(2)} · little flowers ${LilyLogic.sideFlowers(p).length}/${LilyLogic.SIDE_FLOWERS.length}` +
+    ` · meadow ${LilyLogic.meadowFlowers(p).length}/${LilyLogic.MEADOW.length}\n` +
+    `flower ${p.species + 1}/${LilyLogic.SPECIES.length}: ${LilyLogic.SPECIES[p.species]}` +
+    (p.dead ? " · dead: open your palm for the next kind" : ` · died ${p.deaths}×`);
 }
 
 // ---------- pixel art ----------
@@ -601,11 +609,11 @@ function renderGarden() {
     }
     // a green bud for the first half of its growing, then it opens
     const head = { bud: Math.min(1, f.grow * 2), bloom: Math.max(0, f.grow * 2 - 1) };
-    drawFlower(x, y, a + f.side * 0.2, head, w, 0.55);
+    drawHead(p.species, x, y, a + f.side * 0.2, head, w, 0.55);
   }
 
   const top = pts[pts.length - 1];
-  const head = drawFlower(top.x, top.y, top.ang, p, w);
+  const head = drawHead(p.species, top.x, top.y, top.ang, p, w);
   if (head) lastHead = head;
 
   const now = millis() / 1000;
@@ -641,7 +649,7 @@ function drawMeadow(p, w, t) {
       drawLeaf(leafAt.x, leafAt.y, leafAt.ang + out * (1.05 + w * 0.9), 7 * clamp01((f.grow - 0.35) / 0.3), out, w);
     }
     const head = { bud: clamp01((f.grow - 0.3) / 0.35), bloom: clamp01((f.grow - 0.65) / 0.35) };
-    drawFlower(x, y, ang, head, w, f.size);
+    drawHead(p.species, x, y, ang, head, w, f.size);
   }
 }
 
@@ -795,6 +803,145 @@ function drawFlower(hx, hy, headAng, p, wilt, size = 1) {
     px(hx, hy + 1, mix(PAL.throat, PAL.dusty, wilt));
   }
   return { x: hx, y: hy, ang: headAng, len, cols };
+}
+
+// ---------- six kinds of flower ----------
+// lily-logic.js switches to the next kind each time a fist kills the garden.
+// 0 is the stargazer lily (drawFlower); the rest are rings of petals around
+// an optional center disc. len and wid are [closed, extra when fully open].
+const LOOK_SCALE = 1.35; // so a full garden of any kind fills about as much as the lilies
+const LOOKS = [
+  null,
+  {
+    name: "tulip",
+    rings: [{ n: 5, fan: 0.75, round: true, len: [10, 3], wid: [2.6, 1.4], curl: 0.35,
+      cols: { edge: "#ffb0a0", body: "#ff4d5e", stripe: "#c81e45" } }],
+  },
+  {
+    name: "daisy",
+    rings: [{ n: 14, round: true, len: [5, 7], wid: [0.9, 0.6], curl: 0,
+      cols: { edge: "#ffffff", body: "#fffafd", stripe: "#ffe0ee" } }],
+    disc: { r: 3, fill: "#ffd23f", rim: "#f4a300", seeds: "#ffe680" },
+  },
+  {
+    name: "sunflower",
+    rings: [{ n: 16, len: [6, 7], wid: [1.3, 0.9], curl: 0.15,
+      cols: { edge: "#ffe680", body: "#ffc61a", stripe: "#f49b00" } }],
+    disc: { r: 5, fill: "#6b3a1e", rim: "#a0522d", seeds: "#3d2010" },
+  },
+  {
+    name: "rose",
+    rings: [
+      { n: 7, round: true, len: [5, 7], wid: [2.2, 1.8], curl: 0.2, phase: 0,
+        cols: { edge: "#ffc2d4", body: "#ff4f86", stripe: "#e0306a" } },
+      { n: 5, round: true, len: [4, 4], wid: [2, 1.2], curl: 0.1, phase: 0.6,
+        cols: { edge: "#ff8fb1", body: "#e5306b", stripe: "#c2185b" } },
+      { n: 3, round: true, len: [3, 1.5], wid: [1.6, 0.8], curl: 0, phase: 1.2,
+        cols: { edge: "#e5306b", body: "#b0124a", stripe: "#8a0e3a" } },
+    ],
+  },
+  {
+    name: "morning glory",
+    rings: [{ n: 5, round: true, len: [8, 4], wid: [2.2, 3.4], curl: 0,
+      cols: { edge: "#b9c8ff", body: "#5b7cff", stripe: "#ffffff" } }], // the white stripes make its star
+    disc: { r: 1.5, fill: "#fff6b8", rim: "#ffffff" },
+  },
+];
+
+// every flower head goes through here: the main one, the little ones on the
+// stem and the meadow. Returns where it was drawn, for plucked petals.
+function drawHead(species, hx, hy, ang, head, wilt, size = 1) {
+  const look = LOOKS[species];
+  if (!look) return drawFlower(hx, hy, ang, head, wilt, size);
+  if (head.bud <= 0.02) return null;
+  const b = head.bloom * (1 - 0.55 * wilt);
+  let outer = null;
+  for (const ring of look.rings) {
+    const drawn = drawRing(hx, hy, ang, head.bud, b, wilt, size, ring);
+    outer = outer || drawn;
+  }
+  if (look.disc && b > 0.2) drawDisc(hx, hy, look.disc.r * size * LOOK_SCALE * (0.4 + 0.6 * b), look.disc, wilt);
+  return outer;
+}
+
+// n petals that start bunched into a bud along the stem and spread out as
+// the flower opens: all the way round, or into a cup if the ring has a fan
+function drawRing(hx, hy, ang, bud, b, wilt, size, ring) {
+  const ease = 1 - Math.pow(1 - b, 2);
+  const t = Math.min(1, b * 3); // green bud → its own colors
+  const cols = {
+    edge: mix(mix(PAL.budEdge, ring.cols.edge, t), PAL.dusty, wilt),
+    body: mix(mix(PAL.bud, ring.cols.body, t), PAL.dusty, wilt),
+    stripe: mix(mix(PAL.bud, ring.cols.stripe, t), PAL.dustyDark, wilt),
+    spot: null,
+  };
+  const len = bud * (ring.len[0] + ring.len[1] * b) * size * LOOK_SCALE;
+  const wid = (ring.wid[0] + ring.wid[1] * b) * size * LOOK_SCALE;
+  const petal = ring.round ? drawRoundPetal : drawPetal;
+  for (let k = 0; k < ring.n; k++) {
+    const f = ring.n === 1 ? 0 : k / (ring.n - 1) - 0.5;
+    const open = ring.fan
+      ? ring.fan * 2 * f
+      : -Math.PI + ((k + 0.5) * 2 * Math.PI) / ring.n + (ring.phase || 0);
+    const closed = f * 0.3;
+    const offset = closed + (open - closed) * ease;
+    const curl = Math.sign(open || f) * (ring.curl * b + 0.6 * wilt);
+    petal(hx, hy, ang + offset, len, wid, curl, cols, k + 1);
+  }
+  return { x: hx, y: hy, ang, len, cols };
+}
+
+// like drawPetal but with a rounded tip: tulips, daisies, roses, morning glories
+function drawRoundPetal(x0, y0, ang, len, wid, curl, cols) {
+  let x = x0;
+  let y = y0;
+  for (let u = 0; u <= len; u += 0.5) {
+    const tt = u / len;
+    const a = ang + curl * tt * tt;
+    const half = wid * Math.sqrt(Math.max(0, Math.sin(Math.PI * (0.15 + 0.85 * tt))));
+    const nx = -Math.sin(a);
+    const ny = Math.cos(a);
+    for (let v = -half; v <= half + 0.01; v += 0.5) {
+      const edge = half > 0 ? Math.abs(v) / half : 0;
+      const c = edge > 0.75 || tt > 0.9 ? cols.edge : edge < 0.25 && tt > 0.1 && tt < 0.8 ? cols.stripe : cols.body;
+      px(x + nx * v, y + ny * v, c);
+    }
+    x += Math.cos(a) * 0.5;
+    y += Math.sin(a) * 0.5;
+  }
+}
+
+// the middle of a daisy, sunflower or morning glory, speckled with seeds
+function drawDisc(cx, cy, r, disc, wilt) {
+  for (let dy = -r; dy <= r; dy += 0.5) {
+    for (let dx = -r; dx <= r; dx += 0.5) {
+      const d = Math.hypot(dx, dy) / r;
+      if (d > 1) continue;
+      const qx = Math.round(cx + dx);
+      const qy = Math.round(cy + dy);
+      const c = d > 0.75 ? disc.rim : disc.seeds && hash(qx, qy, 3) < 0.35 ? disc.seeds : disc.fill;
+      px(qx, qy, mix(c, PAL.deadDark, wilt * 0.7));
+    }
+  }
+}
+
+// names the new kind for a few seconds after it sprouts
+function drawSpeciesName() {
+  const age = millis() - speciesShownAt;
+  if (age > 3500) return;
+  const alpha = 255 * Math.min(1, (3500 - age) / 800);
+  push();
+  textFont("Silkscreen");
+  textSize(Math.max(16, gardenRect.s * 5));
+  textAlign(CENTER, TOP);
+  noStroke();
+  const x = gardenRect.x + (GW * gardenRect.s) / 2;
+  const y = gardenRect.y + gardenRect.s * 6;
+  fill(255, 255, 255, alpha * 0.8);
+  text(`~ ${LilyLogic.SPECIES[plant.species]} ~`, x + 2, y + 2);
+  fill(58, 20, 48, alpha);
+  text(`~ ${LilyLogic.SPECIES[plant.species]} ~`, x, y);
+  pop();
 }
 
 function dropPetals() {

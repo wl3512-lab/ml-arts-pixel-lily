@@ -185,3 +185,55 @@ test("a fist or no hand doesn't grow the meadow", () => {
   run(p, { pinch: null, stem: "none" }, 3);
   assert.deepEqual(p.meadow, before);
 });
+
+function stepCount(plant, input, seconds, fps = 30) {
+  const n = { plucked: 0, reborn: 0 };
+  for (let i = 0; i < Math.round(seconds * fps); i++) {
+    const e = L.step(plant, input, 1 / fps);
+    if (e.plucked) n.plucked++;
+    if (e.reborn) n.reborn++;
+  }
+  return n;
+}
+
+test("a fist kills the garden, and the next open palm grows a new kind of flower", () => {
+  const p = L.createPlant();
+  stepCount(p, { pinch: 0.8, stem: "open" }, 15);
+  assert.equal(L.SPECIES[p.species], "lily");
+  assert.ok(L.meadowFlowers(p).length > 0);
+  assert.equal(stepCount(p, { pinch: null, stem: "fist" }, 3).reborn, 0); // dying doesn't switch yet
+  assert.equal(p.dead, true);
+  assert.equal(stepCount(p, { pinch: null, stem: "none" }, 2).reborn, 0); // nor does no hand
+  const first = stepCount(p, { pinch: null, stem: "open" }, 1 / 30);
+  assert.equal(first.reborn, 1);
+  assert.equal(L.SPECIES[p.species], "tulip");
+  assert.equal(p.dead, false);
+  assert.equal(p.wilt, 0);
+  assert.ok(p.height < L.STEM_MIN + 1); // starts again as a sprout
+  assert.ok(p.bud < 0.1);
+  assert.ok(p.sideGrowth.every((g) => g === 0) && p.meadow.every((g) => g === 0));
+  assert.equal(stepCount(p, { pinch: null, stem: "open" }, 5).reborn, 0); // once per death
+  assert.equal(L.SPECIES[p.species], "tulip");
+});
+
+test("opening before it's fully dead revives the same flower", () => {
+  const p = L.createPlant();
+  stepCount(p, { pinch: null, stem: "open" }, 3);
+  stepCount(p, { pinch: null, stem: "fist" }, 1);
+  assert.ok(p.wilt > 0.3 && p.wilt < 1);
+  assert.equal(stepCount(p, { pinch: null, stem: "open" }, 2).reborn, 0);
+  assert.equal(p.species, 0);
+  assert.equal(p.wilt, 0);
+});
+
+test("the six kinds come round in order, then start over", () => {
+  const p = L.createPlant();
+  const seen = [L.SPECIES[p.species]];
+  for (let i = 0; i < 6; i++) {
+    stepCount(p, { pinch: null, stem: "fist" }, 2.5);
+    stepCount(p, { pinch: null, stem: "open" }, 0.5);
+    seen.push(L.SPECIES[p.species]);
+  }
+  assert.deepEqual(seen, ["lily", "tulip", "daisy", "sunflower", "rose", "morning glory", "lily"]);
+  assert.equal(p.deaths, 6);
+});
