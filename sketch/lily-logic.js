@@ -12,6 +12,36 @@
   const SNAP_FROM = 0.55; // the pinch had to be at least this open...
   const SNAP_TO = 0.08; // ...and end up this closed
   const REGROW_TIME = 3; // seconds for a new bud
+  const SUN_RISE = 0.8; // per second while the palm is open
+  const SUN_FADE = 0.12; // per second with no palm, so it dims slowly
+  const SUN_FADE_FIST = 0.5;
+  // little lilies on short stalks down the stem: they sprout once the stem is
+  // 6 px past them and open over SIDE_GROW_TIME seconds of open palm
+  const SIDE_FLOWERS = [
+    { at: 62, side: -1 },
+    { at: 76, side: 1 },
+    { at: 90, side: -1 },
+  ];
+  const SIDE_SPROUT = 6;
+  const SIDE_GROW_TIME = 2.5;
+  // once the main stem is tall, more lilies come up out of the grass, one
+  // after another while the palm stays open. x is from the main stem, height
+  // is how tall each one gets, size scales its flower
+  const MEADOW = [
+    { x: -30, height: 34, size: 0.7 },
+    { x: 32, height: 40, size: 0.75 },
+    { x: -46, height: 24, size: 0.6 },
+    { x: 46, height: 28, size: 0.6 },
+    { x: -15, height: 16, size: 0.5 },
+    { x: 17, height: 20, size: 0.5 },
+  ];
+  const MEADOW_START = 60; // main stem height before the first one sprouts
+  const MEADOW_GROW_TIME = 3;
+  const MEADOW_NEXT = 0.4; // the next one starts when this one is 40% grown
+  const OPEN_REACH = 1.5; // see fingerReach
+  const FIST_REACH = 1.25;
+  const PETAL_STAY = 10; // seconds a fallen petal lies in the grass...
+  const PETAL_DISSOLVE = 4; // ...before it dissolves away over this long
 
   // thumb tip to index tip, divided by wrist to middle knuckle, so the same
   // pinch reads the same near or far from the camera. ml5 handPose keypoints:
@@ -32,6 +62,37 @@
     return Math.min(1, Math.max(0, (ratio - 0.2) / 0.8));
   }
 
+  // how far the four fingertips reach from the wrist compared with their
+  // knuckles (5/9/13/17 knuckles, 8/12/16/20 tips): about 1.8-2 with the palm
+  // open, around 1 in a fist
+  function fingerReach(keypoints) {
+    if (!keypoints || keypoints.length < 21) return null;
+    const wrist = keypoints[0];
+    let sum = 0;
+    for (const [knuckle, tip] of [[5, 8], [9, 12], [13, 16], [17, 20]]) {
+      const k = keypoints[knuckle];
+      const t = keypoints[tip];
+      if (!wrist || !k || !t || ![wrist.x, wrist.y, k.x, k.y, t.x, t.y].every(Number.isFinite)) return null;
+      const base = Math.hypot(k.x - wrist.x, k.y - wrist.y);
+      if (base < 1e-6) return null;
+      sum += Math.hypot(t.x - wrist.x, t.y - wrist.y) / base;
+    }
+    return sum / 4;
+  }
+
+  // the stem hand read from handPose keypoints, used until the CNN is trained.
+  // Half-curled fingers read as none, so the plant just waits.
+  function palmState(keypoints) {
+    const reach = fingerReach(keypoints);
+    if (reach === null) return "none";
+    return reach > OPEN_REACH ? "open" : reach < FIST_REACH ? "fist" : "none";
+  }
+
+  // 0 while a fallen petal is fresh, rising to 1 once it has dissolved
+  function petalDissolve(age) {
+    return Math.min(1, Math.max(0, (age - PETAL_STAY) / PETAL_DISSOLVE));
+  }
+
   function createPlant() {
     return {
       time: 0,
@@ -42,6 +103,9 @@
       bud: 1, // 1 = full-size flower head, grows back from 0 after a pluck
       pinchHistory: [],
       plucks: 0,
+      sun: 0, // 0 = pale and unlit, 1 = blazing
+      sideGrowth: SIDE_FLOWERS.map(() => 0), // 0 = not sprouted, 1 = fully open
+      meadow: MEADOW.map(() => 0), // same, for the lilies in the grass
     };
   }
 
@@ -50,6 +114,16 @@
   }
 
   // leaf i sits LEAF_EVERY * (i + 1) up the stem and grows in over 10 pixels
+  // the little lilies that have sprouted, for drawing
+  function sideFlowers(plant) {
+    return SIDE_FLOWERS.map((f, i) => ({ ...f, grow: plant.sideGrowth[i] })).filter((f) => f.grow > 0);
+  }
+
+  // the lilies in the grass that have sprouted, for drawing
+  function meadowFlowers(plant) {
+    return MEADOW.map((f, i) => ({ ...f, grow: plant.meadow[i] })).filter((f) => f.grow > 0);
+  }
+
   function leaves(height) {
     const out = [];
     for (let i = 0; i < leafCount(height); i++) {
@@ -70,8 +144,24 @@
       plant.wilt = Math.max(0, plant.wilt - REVIVE_SPEED * dt);
       const healthy = 1 - plant.wilt;
       plant.height = Math.min(STEM_MAX, plant.height + GROW_SPEED * healthy * dt);
+      plant.sun = Math.min(1, plant.sun + SUN_RISE * dt);
+      SIDE_FLOWERS.forEach((f, i) => {
+        if (plant.height >= f.at + SIDE_SPROUT) {
+          plant.sideGrowth[i] = Math.min(1, plant.sideGrowth[i] + (healthy * dt) / SIDE_GROW_TIME);
+        }
+      });
+      if (plant.height >= MEADOW_START) {
+        MEADOW.forEach((f, i) => {
+          if (i === 0 || plant.meadow[i - 1] >= MEADOW_NEXT) {
+            plant.meadow[i] = Math.min(1, plant.meadow[i] + (healthy * dt) / MEADOW_GROW_TIME);
+          }
+        });
+      }
     } else if (input.stem === "fist") {
       plant.wilt = Math.min(1, plant.wilt + WILT_SPEED * dt);
+      plant.sun = Math.max(0, plant.sun - SUN_FADE_FIST * dt);
+    } else {
+      plant.sun = Math.max(0, plant.sun - SUN_FADE * dt);
     }
 
     // flower hand, from handPose
@@ -99,7 +189,10 @@
     return events;
   }
 
-  const api = { pinchRatio, pinchToOpen, createPlant, step, leaves, leafCount, STEM_MIN, STEM_MAX, SNAP_WINDOW };
+  const api = {
+    pinchRatio, pinchToOpen, fingerReach, palmState, petalDissolve, createPlant, step, leaves, leafCount, sideFlowers,
+    meadowFlowers, STEM_MIN, STEM_MAX, SNAP_WINDOW, SIDE_FLOWERS, MEADOW, MEADOW_START, PETAL_STAY, PETAL_DISSOLVE,
+  };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.LilyLogic = api;
 })(typeof window !== "undefined" ? window : globalThis);

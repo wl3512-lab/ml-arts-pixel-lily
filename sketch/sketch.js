@@ -3,7 +3,8 @@
 // Built on the class example "Training a Webcam Image Classifier with
 // Convolutional Layers" by jackbdu (https://editor.p5js.org/jackbdu/sketches/7Y6VDvUO6).
 // The stem hand (right half of the camera) is read by that CNN, trained here in
-// the browser on 64x64 crops: open / fist / none. The flower hand (left half)
+// the browser on 64x64 crops: open / fist / none. Until it is trained, handPose
+// finger keypoints stand in so the plant grows straight away. The flower hand (left half)
 // is read by ml5 handPose, because a pinch is a distance, not a category.
 // Plant rules live in lily-logic.js.
 
@@ -53,9 +54,10 @@ const keysDown = new Set();
 let plant = LilyLogic.createPlant();
 let lastInput = { pinch: null, stem: "none" };
 let pinchHand = null;
+let stemHand = null;
 let falling = [];
 let fallen = [];
-let lastHead = null; // where the flower was drawn, so plucked petals start there
+let lastHead = null; // where the main flower was drawn, so plucked petals start there
 
 let garden, gctx, skyLayer;
 let gardenRect = { x: 0, y: 0, s: 1 };
@@ -150,11 +152,17 @@ function readInputs() {
   let pinch = null;
   let stem = "none";
   pinchHand = null;
+  stemHand = null;
   if (mode === "camera" && video) {
     // the flower hand is whichever hand has its wrist on the left half
     pinchHand = hands.find((h) => h.keypoints[0].x < video.width / 2) || null;
+    stemHand = hands.find((h) => h.keypoints[0].x >= video.width / 2) || null;
     if (pinchHand) pinch = LilyLogic.pinchToOpen(LilyLogic.pinchRatio(pinchHand.keypoints));
-    if (trained && stemGuess.confidence >= MIN_CONFIDENCE) stem = stemGuess.label;
+    if (trained) {
+      if (stemGuess.confidence >= MIN_CONFIDENCE) stem = stemGuess.label;
+    } else if (stemHand) {
+      stem = LilyLogic.palmState(stemHand.keypoints);
+    }
   } else if (mode === "mouse" && mouseIsPressed && overGarden()) {
     pinch = constrain((mouseX - gardenRect.x) / (GW * gardenRect.s), 0, 1);
   }
@@ -416,6 +424,12 @@ function drawCamera() {
     circle(x + k[4].x * sx, y + k[4].y * sx, 8);
     circle(x + k[8].x * sx, y + k[8].y * sx, 8);
   }
+  if (stemHand && !trained) {
+    const k = stemHand.keypoints;
+    const sx = w / video.width;
+    fill("#ffd23f");
+    for (const i of [8, 12, 16, 20]) circle(x + k[i].x * sx, y + k[i].y * sx, 7);
+  }
   // what the CNN actually gets: 64x64, squished
   if (lastCrop) {
     const t = 128;
@@ -436,11 +450,15 @@ function drawCamera() {
 function updateReadout() {
   const p = plant;
   const pinch = lastInput.pinch === null ? "—" : lastInput.pinch.toFixed(2);
-  const cnn = mode === "camera" ? (trained ? `${stemGuess.label} ${stemGuess.confidence.toFixed(2)}` : "not trained") : "keys";
+  const cnn = mode === "camera"
+    ? (trained ? `CNN ${stemGuess.label} ${stemGuess.confidence.toFixed(2)}` : "handPose (CNN not trained yet)")
+    : "keys";
   $("readout").textContent =
     `pinch ${pinch} → bloom ${p.bloom.toFixed(2)}${p.bud < 1 ? ` (regrowing ${Math.round(p.bud * 100)}%)` : ""}\n` +
     `stem hand: ${cnn} → ${lastInput.stem}\n` +
-    `stem ${Math.round(p.height)}/${LilyLogic.STEM_MAX} · leaves ${LilyLogic.leafCount(p.height)} · wilt ${p.wilt.toFixed(2)} · plucked ${p.plucks}×`;
+    `stem ${Math.round(p.height)}/${LilyLogic.STEM_MAX} · leaves ${LilyLogic.leafCount(p.height)} · wilt ${p.wilt.toFixed(2)} · plucked ${p.plucks}×\n` +
+    `sun ${p.sun.toFixed(2)} · little lilies ${LilyLogic.sideFlowers(p).length}/${LilyLogic.SIDE_FLOWERS.length}` +
+    ` · meadow ${LilyLogic.meadowFlowers(p).length}/${LilyLogic.MEADOW.length}`;
 }
 
 // ---------- pixel art ----------
@@ -470,6 +488,12 @@ const PAL = {
   filament: "#f0ffd8",
   anther: "#c2410c",
   sparkle: "#ffffff",
+  sunDim: "#f1d3e6", // unlit: a pale disc that sits in the pink sky
+  sunDimEdge: "#dcb3cf",
+  sun: "#ffd23f",
+  sunEdge: "#ff9f1c",
+  sunCore: "#fff6b8",
+  sunGlow: "#fff1a8",
 };
 
 const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
@@ -530,11 +554,13 @@ function px(x, y, c) {
 
 function renderGarden() {
   gctx.drawImage(skyLayer.elt, 0, 0);
+  drawSun(plant.sun);
   drawSparkles();
 
   const p = plant;
   const t = millis() / 1000;
   const w = p.wilt;
+  drawMeadow(p, w, t);
 
   // stem: walk up one pixel at a time; wilting bends the top over
   const pts = [];
@@ -560,12 +586,101 @@ function renderGarden() {
     drawLeaf(q.x + (leaf.side > 0 ? 1 : 0), q.y, ang, 11 * leaf.size, leaf.side, w);
   }
 
-  const top = pts[pts.length - 1];
-  drawFlower(top.x, top.y, top.ang, p, w);
+  for (const f of LilyLogic.sideFlowers(p)) {
+    const q = pts[Math.min(pts.length - 1, Math.max(0, Math.round(f.at)))];
+    const ang = q.ang + f.side * (1.05 + w * 1.2); // out from the stem, drooping as it wilts
+    const stalk = 13 * Math.min(1, f.grow * 2.5);
+    let x = q.x + (f.side > 0 ? 1 : 0);
+    let y = q.y;
+    let a = ang;
+    for (let u = 0; u < stalk; u += 0.5) {
+      a = ang - f.side * 0.7 * (u / 13); // curves back up at the end
+      x += Math.cos(a) * 0.5;
+      y += Math.sin(a) * 0.5;
+      px(x, y, stemC);
+    }
+    // a green bud for the first half of its growing, then it opens
+    const head = { bud: Math.min(1, f.grow * 2), bloom: Math.max(0, f.grow * 2 - 1) };
+    drawFlower(x, y, a + f.side * 0.2, head, w, 0.55);
+  }
 
-  for (const f of fallen) drawPetal(f.x, f.y, f.ang, f.len, 1.6, 0, f.cols, f.seed);
+  const top = pts[pts.length - 1];
+  const head = drawFlower(top.x, top.y, top.ang, p, w);
+  if (head) lastHead = head;
+
+  const now = millis() / 1000;
+  for (const f of fallen) {
+    const d = LilyLogic.petalDissolve(now - f.landed);
+    drawPetal(f.x, f.y, f.ang, f.len, 1.6, 0, d > 0 ? fadeCols(f.cols, d) : f.cols, f.seed, d);
+  }
   for (const f of falling) drawPetal(f.x, f.y, f.ang, f.len, 1.8, 0.3, f.cols, f.seed);
 
+}
+
+// lilies that come up out of the grass, behind the main plant: thinner
+// stems, one leaf each, a bud that opens as they finish growing
+function drawMeadow(p, w, t) {
+  const stemC = mix(PAL.stem, PAL.dead, w);
+  const clamp01 = (v) => Math.min(1, Math.max(0, v));
+  for (const f of LilyLogic.meadowFlowers(p)) {
+    const h = f.height * Math.min(1, f.grow * 1.6);
+    const out = Math.sign(f.x); // they wilt away from the main stem
+    let x = BASE_X + f.x;
+    let y = GROUND + 1;
+    let ang = -HALF_PI;
+    let leafAt = null;
+    for (let s = 0; s < h; s++) {
+      const u = s / f.height;
+      ang = -HALF_PI + Math.sin(t * 1.5 + f.x + u * 2) * 0.06 * u + out * w * 2.2 * u * u;
+      x += Math.cos(ang);
+      y += Math.sin(ang);
+      px(x, y, stemC);
+      if (s === Math.round(f.height * 0.4)) leafAt = { x, y, ang };
+    }
+    if (leafAt && f.grow > 0.35) {
+      drawLeaf(leafAt.x, leafAt.y, leafAt.ang + out * (1.05 + w * 0.9), 7 * clamp01((f.grow - 0.35) / 0.3), out, w);
+    }
+    const head = { bud: clamp01((f.grow - 0.3) / 0.35), bloom: clamp01((f.grow - 0.65) / 0.35) };
+    drawFlower(x, y, ang, head, w, f.size);
+  }
+}
+
+// the sun lights up while the palm is open: it warms from a pale disc to gold,
+// grows rays and a dithered glow
+function drawSun(level) {
+  const cx = GW - 22;
+  const cy = 20;
+  const r = 7;
+  const t = millis() / 1000;
+  const glow = r + 2 + 13 * level;
+  for (let y = Math.floor(cy - glow); y <= cy + glow; y++) {
+    for (let x = Math.floor(cx - glow); x <= cx + glow; x++) {
+      const d = Math.hypot(x - cx, y - cy);
+      if (d <= r || d > glow) continue;
+      const g = level * (1 - (d - r) / (glow - r)) * 0.9;
+      if (g > (BAYER[(y & 3) * 4 + (x & 3)] + 0.5) / 16) px(x, y, PAL.sunGlow);
+    }
+  }
+  if (level > 0.1) {
+    const len = 2 + 4 * level;
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * TWO_PI + t * 0.4;
+      for (let u = r + 2; u < r + 2 + len; u += 0.5) px(cx + Math.cos(a) * u, cy + Math.sin(a) * u, PAL.sunEdge);
+    }
+  }
+  const body = mix(PAL.sunDim, PAL.sun, level);
+  const rim = mix(PAL.sunDimEdge, PAL.sunEdge, level);
+  for (let y = -r; y <= r; y++) {
+    for (let x = -r; x <= r; x++) {
+      const d = Math.hypot(x, y);
+      if (d > r + 0.3) continue;
+      px(cx + x, cy + y, d > r - 1.2 ? rim : body);
+    }
+  }
+  if (level > 0.5) {
+    // a highlight up and to the left once it is properly lit
+    for (const [x, y] of [[-3, -3], [-2, -3], [-3, -2], [-2, -4], [-4, -2]]) px(cx + x, cy + y, PAL.sunCore);
+  }
 }
 
 function drawSparkles() {
@@ -601,6 +716,17 @@ function drawLeaf(x0, y0, ang, len, side, wilt) {
   }
 }
 
+// a dissolving petal also fades toward the sky behind it
+function fadeCols(cols, k) {
+  const to = PAL.sky[PAL.sky.length - 1];
+  return {
+    edge: mix(cols.edge, to, k),
+    body: mix(cols.body, to, k),
+    stripe: mix(cols.stripe, to, k),
+    spot: cols.spot && mix(cols.spot, to, k),
+  };
+}
+
 function petalColors(bloom, wilt) {
   // a shut bud is green; it turns pink as it opens
   const pinkness = Math.min(1, bloom * 3);
@@ -614,7 +740,7 @@ function petalColors(bloom, wilt) {
 
 // a lily petal: pointed at the tip, widest a third of the way out, white edge,
 // hot pink stripe down the middle, dark spots near the throat
-function drawPetal(x0, y0, ang, len, wid, curl, cols, seed) {
+function drawPetal(x0, y0, ang, len, wid, curl, cols, seed, dissolve = 0) {
   let x = x0;
   let y = y0;
   for (let u = 0; u <= len; u += 0.5) {
@@ -627,7 +753,11 @@ function drawPetal(x0, y0, ang, len, wid, curl, cols, seed) {
       const edge = half > 0 ? Math.abs(v) / half : 0;
       let c = edge > 0.72 ? cols.edge : edge < 0.3 && tt > 0.1 ? cols.stripe : cols.body;
       if (cols.spot && tt > 0.12 && tt < 0.55 && hash(seed, Math.round(u * 2), Math.round(v * 2)) < 0.09) c = cols.spot;
-      px(x + nx * v, y + ny * v, c);
+      const qx = Math.round(x + nx * v);
+      const qy = Math.round(y + ny * v);
+      // dissolving drops pixels in a fixed random order until none are left
+      if (dissolve > 0 && hash(seed + 31, qx, qy) < dissolve) continue;
+      px(qx, qy, c);
     }
     x += Math.cos(a) * 0.5;
     y += Math.sin(a) * 0.5;
@@ -637,12 +767,14 @@ function drawPetal(x0, y0, ang, len, wid, curl, cols, seed) {
 const OPEN_SPREAD = [-2.62, -1.57, -0.52, 0.52, 1.57, 2.62]; // six petals, 60° apart
 const BUD_SPREAD = [-0.16, -0.1, -0.03, 0.03, 0.1, 0.16];
 
-function drawFlower(hx, hy, headAng, p, wilt) {
-  if (p.bud <= 0.02) return;
+// size 1 is the main lily; the little ones on the stem are drawn at 0.55.
+// Returns where the head was drawn, so plucked petals can start there.
+function drawFlower(hx, hy, headAng, p, wilt, size = 1) {
+  if (p.bud <= 0.02) return null;
   const b = p.bloom * (1 - 0.55 * wilt);
   const ease = 1 - Math.pow(1 - b, 2);
-  const len = p.bud * (12 + 10 * b); // wider pinch, longer petals
-  const wid = 1.6 + 2.6 * b;
+  const len = p.bud * (12 + 10 * b) * size; // wider pinch, longer petals
+  const wid = (1.6 + 2.6 * b) * size;
   const cols = petalColors(b, wilt);
   // draw the three back petals first so the front three overlap them
   for (const k of [0, 2, 4, 1, 3, 5]) {
@@ -662,7 +794,7 @@ function drawFlower(hx, hy, headAng, p, wilt) {
     px(hx + 1, hy, mix(PAL.throat, PAL.dusty, wilt));
     px(hx, hy + 1, mix(PAL.throat, PAL.dusty, wilt));
   }
-  lastHead = { x: hx, y: hy, ang: headAng, len, cols };
+  return { x: hx, y: hy, ang: headAng, len, cols };
 }
 
 function dropPetals() {
@@ -695,8 +827,9 @@ function updatePetals(dt) {
     f.ang += f.spin * dt;
   }
   for (const f of falling.filter((f) => f.y >= GROUND - 1)) {
-    fallen.push({ x: f.x, y: GROUND - 1, ang: Math.cos(f.ang) > 0 ? 0.1 : Math.PI - 0.1, len: f.len, cols: f.cols, seed: f.seed });
+    fallen.push({ x: f.x, y: GROUND - 1, ang: Math.cos(f.ang) > 0 ? 0.1 : Math.PI - 0.1, len: f.len, cols: f.cols, seed: f.seed, landed: t });
   }
+  fallen = fallen.filter((f) => LilyLogic.petalDissolve(t - f.landed) < 1);
   falling = falling.filter((f) => f.y < GROUND - 1 && f.x > -10 && f.x < GW + 10);
   if (fallen.length > 36) fallen.splice(0, fallen.length - 36);
 }

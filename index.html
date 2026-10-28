@@ -67,12 +67,14 @@
         <thead><tr><th scope="col">Hand</th><th scope="col">Gesture</th><th scope="col">What the lily does</th><th scope="col">Read by</th></tr></thead>
         <tbody>
           <tr><td>left</td><td>pinch wider / closer</td><td>blooms open and stretches its petals / closes back into a bud</td><td>handPose</td></tr>
-          <tr><td>left</td><td>snap the pinch shut</td><td>the six petals fall off and flutter to the grass, then a new bud grows back in 3 s</td><td>handPose</td></tr>
-          <tr><td>right</td><td>open palm</td><td>the stem grows taller, with a new leaf every 15 pixels, and recovers from wilting</td><td>my CNN</td></tr>
-          <tr><td>right</td><td>fist</td><td>wilts: the stem bends over, everything turns brown, the flower droops</td><td>my CNN</td></tr>
+          <tr><td>left</td><td>snap the pinch shut</td><td>the six petals fall off and flutter to the grass, where they lie for 10 s and then dissolve. A new bud grows back in 3 s</td><td>handPose</td></tr>
+          <tr><td>right</td><td>open palm</td><td>the stem grows taller, with a new leaf every 15 pixels, and recovers from wilting. The sun lights up</td><td>my CNN</td></tr>
+          <tr><td>right</td><td>keep the palm open</td><td>three little lilies sprout off the stem, then six more come up out of the grass one after another</td><td>my CNN</td></tr>
+          <tr><td>right</td><td>fist</td><td>wilts: the stems bend over, everything turns brown, the flowers droop, and the sun goes pale</td><td>my CNN</td></tr>
         </tbody>
       </table>
       <p><b>Why two different models?</b> The class example is a <em>classifier</em>. It answers “which of my labels is this picture?”, so it fits the stem hand well: open, fist, or no hand at all. A pinch is a distance, though, not a category. A classifier can't tell me <em>how</em> open my fingers are, so the flower hand uses handPose keypoints (thumb tip to index tip, divided by the palm length so it reads the same near or far from the camera). Closing slowly closes the flower. Only a <em>snap</em>, from at least 0.55 open to almost touching within 0.4 seconds, plucks the petals.</p>
+      <p>Until the CNN is trained, handPose stands in for the stem hand too, so the lily responds right away. It compares how far the four fingertips reach from the wrist with how far their knuckles are (about 1.8–2 with the palm open, about 1 in a fist). The sketch shows yellow dots on those fingertips. Once you train, the CNN takes over.</p>
       <div class="states">
         <figure><img src="media/02-bud.jpg" alt="Tall stem with four leaves and a closed green bud with a pink blush" loading="lazy"><figcaption>Bud: open palm held 4 s, the stem grew 22 → 80 px</figcaption></figure>
         <figure><img src="media/03-half.jpg" alt="Half-open lily" loading="lazy"><figcaption>Pinch closed slowly to 0.4: half open, nothing plucked</figcaption></figure>
@@ -80,6 +82,10 @@
         <figure><img src="media/05-pluck.jpg" alt="Six pink petals falling away from the stem, a small green bud at the top" loading="lazy"><figcaption>Snap: the petals fall and a new bud starts growing</figcaption></figure>
         <figure><img src="media/06-wilted.jpg" alt="Brown wilted stem bent over, the bud hanging down, pink petals lying in the grass" loading="lazy"><figcaption>Fist for 2 s: wilted, with the plucked petals in the grass</figcaption></figure>
         <figure><img src="media/07-revived.jpg" alt="Green tall stem again with an open lily and petals on the ground" loading="lazy"><figcaption>Open palm: green again, taller, ready to bloom</figcaption></figure>
+      </div>
+      <div class="states" style="grid-template-columns:repeat(2,1fr)">
+        <figure><img src="media/08-meadow.jpg" alt="A full meadow: the tall main lily with three little lilies on its stem, six more lilies in the grass at different heights, and a glowing pixel sun" loading="lazy"><figcaption>Palm open for about 14 s: a gold sun, three little lilies on the stem and the whole meadow in bloom</figcaption></figure>
+        <figure><img src="media/08b-meadow-wilt.jpg" alt="The same meadow wilted: every stem bent over and brown, dusty mauve flowers hanging down, a pale sun" loading="lazy"><figcaption>Then a fist for 2 s: everything droops and the sun goes pale</figcaption></figure>
       </div>
     </div>
   </section>
@@ -137,7 +143,7 @@ live guesses matching the clip: 29/30
 mean crop brightness: open 0.033 · fist −0.042 · none −0.058</pre>
       <p>The brightness line proves the crop is the correct half: the discs only exist on the stem-hand side, and the crops get brighter with disc size. If I had cropped the wrong half, all three would read the same.</p>
       <p><b>The plant, with real mouse and key events.</b> A script drove headless Chrome through every state (mouse mode: drag across the garden to pinch, hold O / F for the stem). Holding O for 4 s grew the stem 22 → 80 px and added leaves. Dragging right bloomed it to 0.95. Closing slowly to 0.4 plucked nothing. A snap plucked once, and the 6 petals fell and landed. Holding F for 2.2 s wilted it fully, and O brought it back. Log: <a href="https://github.com/wl3512-lab/ml-arts-pixel-lily/blob/main/tests/results/mouse-run-2026-10-28.txt">mouse-run-2026-10-28.txt</a>.</p>
-      <p><b>The rules.</b> 10 node tests on <code>lily-logic.js</code>: the pinch reads the same anywhere in the frame and at any distance, broken (NaN) hands are ignored, slow closing never plucks, snapping plucks exactly once and regrows, a snap from a closed flower does nothing, open grows up to a limit, a fist wilts without shrinking, and no hands means nothing changes.</p>
+      <p><b>The rules.</b> 16 node tests on <code>lily-logic.js</code>: the pinch reads the same anywhere in the frame and at any distance, broken (NaN) hands are ignored, slow closing never plucks, snapping plucks exactly once and regrows, a snap from a closed flower does nothing, open grows up to a limit, a fist wilts without shrinking, no hands means nothing changes, the handPose stand-in tells open from fist, the sun rises and fades, the little lilies and the meadow sprout in order and only with an open palm, and fallen petals dissolve on time.</p>
       <p class="note">Not tested yet: a live run with my own two hands. Everything above uses a fake camera, the mouse, or generated pictures.</p>
     </div>
   </section>
@@ -176,7 +182,7 @@ mean crop brightness: open 0.033 · fist −0.042 · none −0.058</pre>
         <li><a href="https://docs.ml5js.org/#/reference/neural-network">ml5.neuralNetwork</a> and <a href="https://docs.ml5js.org/#/reference/handpose">ml5.handPose</a> references; the sketch pins ml5.js 1.4.0 and p5.js 1.11.10</li>
         <li>Pixel font: <a href="https://fonts.google.com/specimen/Silkscreen">Silkscreen</a> by Jason Kottke (Google Fonts)</li>
       </ul>
-      <p class="small"><b>AI assistance:</b> Claude (Anthropic), October 28, 2026, diagnosed why the class example only guessed one label, ran the training experiments, and wrote the sketch, the plant logic and its tests, the automated browser checks (including the generated camera clip), and this write-up. The lily, its two-hand controls and the pixel style are my idea. No live test with my own hands or completion of the assigned reading is claimed here.</p>
+      <p class="small"><b>AI assistance:</b> Claude (Anthropic), October 28, 2026, diagnosed why the class example only guessed one label, ran the training experiments, and wrote the sketch, the plant logic and its tests, the automated browser checks (including the generated camera clip), the meadow, and this write-up. The sun, the little lilies on the stem, the handPose stand-in and the dissolving petals were added later the same day, also AI-assisted. The lily, its two-hand controls and the pixel style are my idea. No live test with my own hands or completion of the assigned reading is claimed here.</p>
     </div>
   </section>
 

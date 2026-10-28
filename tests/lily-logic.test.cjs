@@ -108,3 +108,80 @@ test("no hands means nothing changes", () => {
   assert.equal(p.wilt, snap.w);
   assert.ok(Math.abs(p.bloom - snap.b) < 0.05);
 });
+
+// a fake handPose hand with the four fingers either spread out or curled in
+function palm(x, y, size, open) {
+  const k = Array.from({ length: 21 }, () => ({ x, y }));
+  const reach = open ? 1.9 : 0.9; // tip distance from the wrist, in knuckle lengths
+  [[5, 8, -0.3], [9, 12, -0.1], [13, 16, 0.1], [17, 20, 0.3]].forEach(([knuckle, tip, lean]) => {
+    k[knuckle] = { x: x + lean * size, y: y - size };
+    k[tip] = { x: x + lean * size * reach, y: y - size * reach };
+  });
+  return k;
+}
+
+test("handPose reads an open palm and a fist the same near or far", () => {
+  assert.equal(L.palmState(palm(400, 300, 60, true)), "open");
+  assert.equal(L.palmState(palm(500, 200, 180, true)), "open");
+  assert.equal(L.palmState(palm(400, 300, 60, false)), "fist");
+  assert.equal(L.palmState(palm(500, 200, 180, false)), "fist");
+  assert.equal(L.palmState([]), "none");
+  const broken = palm(400, 300, 60, true);
+  broken[12] = { x: NaN, y: 0 };
+  assert.equal(L.palmState(broken), "none");
+});
+
+test("an open palm lights the sun, which fades slowly without it", () => {
+  const p = L.createPlant();
+  assert.equal(p.sun, 0);
+  run(p, { pinch: null, stem: "open" }, 1.5);
+  assert.equal(p.sun, 1);
+  run(p, { pinch: null, stem: "none" }, 2);
+  assert.ok(p.sun > 0.6 && p.sun < 1, `sun ${p.sun}`);
+  run(p, { pinch: null, stem: "fist" }, 2);
+  assert.equal(p.sun, 0);
+});
+
+test("little lilies sprout as the stem passes them and open with the palm", () => {
+  const p = L.createPlant();
+  assert.equal(L.sideFlowers(p).length, 0);
+  run(p, { pinch: null, stem: "open" }, 3.5); // stem about 71 px: only the lowest one
+  assert.equal(L.sideFlowers(p).length, 1);
+  run(p, { pinch: null, stem: "open" }, 12);
+  assert.equal(L.sideFlowers(p).length, L.SIDE_FLOWERS.length);
+  assert.ok(p.sideGrowth.every((g) => g === 1));
+  const before = [...p.sideGrowth];
+  run(p, { pinch: null, stem: "fist" }, 2); // a fist doesn't undo them, it only wilts them
+  assert.deepEqual(p.sideGrowth, before);
+});
+
+test("fallen petals stay 10 s, then dissolve over 4 s", () => {
+  assert.equal(L.petalDissolve(0), 0);
+  assert.equal(L.petalDissolve(9.9), 0);
+  assert.ok(Math.abs(L.petalDissolve(12) - 0.5) < 1e-9);
+  assert.equal(L.petalDissolve(14), 1);
+  assert.equal(L.petalDissolve(60), 1);
+});
+
+test("more lilies come up out of the grass once the stem is tall, one after another", () => {
+  const p = L.createPlant();
+  run(p, { pinch: null, stem: "open" }, 2); // stem about 50 px, under MEADOW_START
+  assert.ok(p.height < L.MEADOW_START);
+  assert.equal(L.meadowFlowers(p).length, 0);
+  run(p, { pinch: null, stem: "open" }, 2);
+  const early = L.meadowFlowers(p).length;
+  assert.ok(early >= 1 && early < L.MEADOW.length, `early ${early}`);
+  assert.ok(p.meadow[0] > p.meadow[early - 1] || early === 1); // staggered, the first is furthest along
+  run(p, { pinch: null, stem: "open" }, 20);
+  assert.equal(L.meadowFlowers(p).length, L.MEADOW.length);
+  assert.ok(p.meadow.every((g) => g === 1));
+});
+
+test("a fist or no hand doesn't grow the meadow", () => {
+  const p = L.createPlant();
+  run(p, { pinch: null, stem: "open" }, 4.5);
+  const before = [...p.meadow];
+  run(p, { pinch: null, stem: "fist" }, 3);
+  run(p, { pinch: null, stem: "none" }, 3);
+  assert.deepEqual(p.meadow, before);
+});
