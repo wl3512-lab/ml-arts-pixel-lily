@@ -1,0 +1,10 @@
+start:          {"h":22,"wilt":0,"bloom":0,"bud":1,"plucks":0,"pinch":null,"stem":"none","falling":0,"fallen":0}
+held O 4s:      {"h":80,"wilt":0,"bloom":0,"bud":1,"plucks":0,"pinch":null,"stem":"none","falling":0,"fallen":0}
+dragged right:  {"h":80,"wilt":0,"bloom":0.95,"bud":1,"plucks":0,"pinch":0.95,"stem":"none","falling":0,"fallen":0}
+slow to 0.4:    {"h":80,"wilt":0,"bloom":0.4,"bud":1,"plucks":0,"pinch":0.4,"stem":"none","falling":0,"fallen":0}
+snapped shut:   {"h":80,"wilt":0,"bloom":0,"bud":0.12,"plucks":1,"pinch":0.02,"stem":"none","falling":6,"fallen":0}
+2.5 s later:    {"h":80,"wilt":0,"bloom":0.02,"bud":1,"plucks":1,"pinch":0.02,"stem":"none","falling":6,"fallen":0}
+regrown:        {"h":80,"wilt":0,"bloom":0.02,"bud":1,"plucks":1,"pinch":null,"stem":"none","falling":0,"fallen":6}
+held F 2.2s:    {"h":80,"wilt":1,"bloom":0.02,"bud":1,"plucks":1,"pinch":null,"stem":"none","falling":0,"fallen":6}
+held O 1.5s:    {"h":96,"wilt":0,"bloom":0.02,"bud":1,"plucks":1,"pinch":null,"stem":"none","falling":0,"fallen":6}
+bloom again:    {"h":96,"wilt":0,"bloom":0.85,"bud":1,"plucks":1,"pinch":0.85,"stem":"none","falling":0,"fallen":6}

@@ -3,12 +3,184 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Pixel Lily · Lucy Liu</title>
-  <script src="https://cdn.jsdelivr.net/npm/p5@1.11.10/lib/p5.min.js"></script>
-  <script src="https://unpkg.com/ml5@1.4.0/dist/ml5.min.js"></script>
-  <style>body{margin:0;padding:16px;background:#fff0f6;font:14px/1.4 system-ui,sans-serif}canvas{display:block}</style>
+  <meta name="description" content="Lucy Liu's ML Arts Assignment 8: a pixel-art lily controlled by two hands. A CNN trained in the browser reads the stem hand, handPose reads the pinch.">
+  <title>Pixel Lily · Lucy Liu · ML Arts 08</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Silkscreen&display=swap" rel="stylesheet">
+  <style>
+    :root{--bg:#fff5fa;--ink:#2a1630;--muted:#6e5470;--line:#ecd3e2;--accent:#c2185b;--chip:#fbe3ef;--code:#f6e1ec}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.65 system-ui,sans-serif}
+    main{max-width:1000px;margin:auto;padding:56px 28px 80px}
+    .meta{font:12px/1.7 "Silkscreen",ui-monospace,monospace;letter-spacing:.04em;color:var(--muted)}
+    h1{font-family:"Silkscreen",ui-monospace,monospace;font-weight:400;font-size:clamp(46px,9vw,92px);line-height:1;letter-spacing:-.02em;margin:26px 0 22px;color:var(--accent)}
+    h2{font-size:26px;letter-spacing:-.03em;line-height:1.25;margin:0 0 18px}
+    p{max-width:690px;margin:0 0 20px}
+    .lead{font-size:22px;line-height:1.45;max-width:740px}
+    a{color:var(--accent);text-underline-offset:4px}
+    .actions{display:flex;flex-wrap:wrap;gap:12px;margin:28px 0 36px}
+    .button{display:inline-block;padding:11px 18px;border:1px solid var(--accent);border-radius:6px;text-decoration:none}
+    .button.primary{background:var(--accent);color:#fff}
+    figure{margin:0}
+    img{display:block;max-width:100%;height:auto;border-radius:6px;image-rendering:pixelated}
+    figcaption{font-size:13px;color:var(--muted);line-height:1.6;margin-top:10px;max-width:760px}
+    .section{border-top:1px solid var(--line);padding-top:34px;margin-top:44px;display:grid;grid-template-columns:185px 1fr;gap:30px}
+    .section .content{min-width:0}
+    .pipeline{font:14px/1.8 ui-monospace,monospace;padding:16px 18px;background:var(--chip);border-radius:6px;margin:22px 0}
+    .states{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:24px 0}
+    .states figcaption{margin-top:6px}
+    table{border-collapse:collapse;width:100%;font-size:15px;margin:18px 0 26px}
+    td,th{text-align:left;padding:9px 4px;border-bottom:1px solid var(--line);vertical-align:top}
+    th{font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+    code{font-size:.86em;background:var(--code);padding:2px 5px;border-radius:3px}
+    .note{padding-left:16px;border-left:3px solid #f19cc4;font-size:15px;color:var(--muted)}
+    ul{padding-left:22px}li{margin:8px 0}
+    .small{font-size:14px;color:var(--muted)}
+    pre{font:13px/1.6 ui-monospace,monospace;background:var(--chip);padding:14px 16px;border-radius:6px;overflow:auto;max-width:100%}
+    footer{border-top:1px solid var(--line);margin-top:50px;padding-top:22px;font-size:13px;color:var(--muted)}
+    @media(max-width:650px){main{padding:32px 16px 55px}.section{grid-template-columns:1fr;gap:8px}.states{grid-template-columns:repeat(2,1fr)}.lead{font-size:19px}table{font-size:14px}}
+  </style>
 </head>
 <body>
-  <script src="sketch.js"></script>
+<main>
+  <header>
+    <div class="meta">Lucy Liu · Intro to Machine Learning for the Arts<br>Assignment 08 · Convolutional Neural Networks · October 28, 2026</div>
+    <h1>Pixel Lily</h1>
+    <p class="lead">A pink stargazer lily in chunky pixel art, grown with two hands. My left hand pinches the flower open, and snapping the pinch shut plucks the petals. My right hand looks after the stem: an open palm grows it and adds leaves, a fist wilts it. The stem hand is read by a convolutional neural network that I train in the browser on pictures of my own hand.</p>
+    <nav class="actions" aria-label="Project links">
+      <a class="button primary" href="sketch/">Open the p5.js sketch ↗</a>
+      <a class="button" href="https://github.com/wl3512-lab/ml-arts-pixel-lily">Code &amp; tests</a>
+    </nav>
+  </header>
+
+  <figure>
+    <img src="media/01-bloom.jpg" alt="The sketch: a control panel on the left and a pixel-art garden with a tall green stem, four leaves and a fully open pink spotted lily">
+    <figcaption>Fully open, with the pinch at 0.95. Each petal has a white edge, a hot pink stripe and dark spots near the throat, and six orange anthers stick out. The wider the pinch, the further the petals open and the longer they get.</figcaption>
+  </figure>
+
+  <section class="section">
+    <h2>The idea</h2>
+    <div class="content">
+      <p>The camera picture is split down the middle by a pink line. The left side belongs to the flower hand and the right side to the stem hand.</p>
+      <table>
+        <thead><tr><th scope="col">Hand</th><th scope="col">Gesture</th><th scope="col">What the lily does</th><th scope="col">Read by</th></tr></thead>
+        <tbody>
+          <tr><td>left</td><td>pinch wider / closer</td><td>blooms open and stretches its petals / closes back into a bud</td><td>handPose</td></tr>
+          <tr><td>left</td><td>snap the pinch shut</td><td>the six petals fall off and flutter to the grass, then a new bud grows back in 3 s</td><td>handPose</td></tr>
+          <tr><td>right</td><td>open palm</td><td>the stem grows taller, with a new leaf every 15 pixels, and recovers from wilting</td><td>my CNN</td></tr>
+          <tr><td>right</td><td>fist</td><td>wilts: the stem bends over, everything turns brown, the flower droops</td><td>my CNN</td></tr>
+        </tbody>
+      </table>
+      <p><b>Why two different models?</b> The class example is a <em>classifier</em>. It answers “which of my labels is this picture?”, so it fits the stem hand well: open, fist, or no hand at all. A pinch is a distance, though, not a category. A classifier can't tell me <em>how</em> open my fingers are, so the flower hand uses handPose keypoints (thumb tip to index tip, divided by the palm length so it reads the same near or far from the camera). Closing slowly closes the flower. Only a <em>snap</em>, from at least 0.55 open to almost touching within 0.4 seconds, plucks the petals.</p>
+      <div class="states">
+        <figure><img src="media/02-bud.jpg" alt="Tall stem with four leaves and a closed green bud with a pink blush" loading="lazy"><figcaption>Bud: open palm held 4 s, the stem grew 22 → 80 px</figcaption></figure>
+        <figure><img src="media/03-half.jpg" alt="Half-open lily" loading="lazy"><figcaption>Pinch closed slowly to 0.4: half open, nothing plucked</figcaption></figure>
+        <figure><img src="media/04-bloom.jpg" alt="Fully open lily" loading="lazy"><figcaption>Pinch 0.95: full bloom, longest petals</figcaption></figure>
+        <figure><img src="media/05-pluck.jpg" alt="Six pink petals falling away from the stem, a small green bud at the top" loading="lazy"><figcaption>Snap: the petals fall and a new bud starts growing</figcaption></figure>
+        <figure><img src="media/06-wilted.jpg" alt="Brown wilted stem bent over, the bud hanging down, pink petals lying in the grass" loading="lazy"><figcaption>Fist for 2 s: wilted, with the plucked petals in the grass</figcaption></figure>
+        <figure><img src="media/07-revived.jpg" alt="Green tall stem again with an open lily and petals on the ground" loading="lazy"><figcaption>Open palm: green again, taller, ready to bloom</figcaption></figure>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <h2>What the CNN sees</h2>
+    <div class="content">
+      <div class="pipeline" aria-label="Processing stages">camera (mirrored) → right half, 320×480 → squished to 64×64 → pixels −0.5…0.5 → CNN → open / fist / none → the stem</div>
+      <p>This builds on the class example <a href="https://editor.p5js.org/jackbdu/sketches/7Y6VDvUO6">Training a Webcam Image Classifier with Convolutional Layers</a>. The example grabbed the whole canvas with <code>get()</code>. My canvas is the garden, so I grab straight from the camera with <code>video.get()</code>, and only its right half. p5's <code>flipped: true</code> mirrors the actual pixels, not just the preview (I checked the p5 1.11.10 source), so the right half in code is the right half you see. The sketch draws the 64×64 picture next to the camera preview so you can watch what the network is really looking at.</p>
+      <figure><img src="media/09-camera.jpg" alt="Sketch in camera mode: the camera preview with a pink line down the middle, labeled flower hand and stem hand, and above it a 64 by 64 thumbnail labeled what the CNN sees" loading="lazy"><figcaption>Camera mode, here with Chrome's fake test camera. Bottom right: the preview split into flower hand and stem hand. Above it: the 64×64 crop the CNN actually gets.</figcaption></figure>
+      <p style="margin-top:24px">ml5 builds this network for <code>task: "imageClassification"</code>. These are the shapes from its model summary:</p>
+      <table>
+        <thead><tr><th scope="col">Layer</th><th scope="col">Output</th><th scope="col">Weights</th><th scope="col">What it does</th></tr></thead>
+        <tbody>
+          <tr><td>input</td><td>64×64×4</td><td>–</td><td>the crop: red, green, blue, alpha per pixel</td></tr>
+          <tr><td>conv2d</td><td>60×60×8</td><td>808</td><td>8 filters, each 5×5 pixels, slid across the picture. Each one makes a feature map that lights up wherever its pattern (an edge, a blob of skin) appears. ReLU then sets the negatives to 0.</td></tr>
+          <tr><td>max pooling</td><td>30×30×8</td><td>0</td><td>keeps the strongest value in every 2×2 block. Half the size, and a finger can shift a pixel without changing the result.</td></tr>
+          <tr><td>conv2d</td><td>26×26×16</td><td>3,216</td><td>16 filters that look at the first layer's maps, so they find patterns made of patterns (fingers spread vs. curled)</td></tr>
+          <tr><td>max pooling</td><td>13×13×16</td><td>0</td><td>halves it again</td></tr>
+          <tr><td>flatten + dense</td><td>3</td><td>8,115</td><td>every remaining value votes for open, fist or none. Softmax turns the votes into confidences that add up to 1.</td></tr>
+        </tbody>
+      </table>
+      <p>That's 12,139 weights, all learned from about a hundred pictures. The plant only reacts when the CNN is at least 60% sure. Anything less counts as “none”, so a confused guess doesn't wilt the lily.</p>
+      <p>Recording examples works like my Assignment 7: press and hold a label (or hold 1, 2 or 3) and pictures stream in about 9 times a second while you move your hand around. The variety matters, because the network learns everything in the crop, including the background and my shirt.</p>
+    </div>
+  </section>
+
+  <section class="section">
+    <h2>Why it only ever said “a”</h2>
+    <div class="content">
+      <p>Before building any of this, I ran the class example unchanged: open palm as A, fist as B, train. It only ever guessed <b>a</b>. Two things were probably going on.</p>
+      <p><b>1. The hand was a tiny part of the picture.</b> The example looks at the whole frame, so my face and the room took up most of every example, and open and fist looked almost the same. Cropping to the stem-hand half made the hand a much bigger share of what the network sees.</p>
+      <p><b>2. Training got stuck.</b> I tested ml5's CNN on generated pictures (a big blob for open, a small blob for fist, nothing for none, plus noise) to find settings that train reliably, 3 labels, 20 pictures each:</p>
+      <table>
+        <thead><tr><th scope="col">Setting</th><th scope="col">Result</th></tr></thead>
+        <tbody>
+          <tr><td>ml5 default (SGD, learning rate 0.02), easy pictures</td><td>learned: loss 0.004, 24/30 new pictures right</td></tr>
+          <tr><td>learning rate 0.1 (what the class digit example uses)</td><td>stuck at 1.09 = coin-flip for 3 labels; on the fake camera it died at 5.8</td></tr>
+          <tr><td>ml5 default, low-contrast “webcam-like” pictures</td><td>flaky: one run stuck at coin-flip, one slow, one spiked to 4.5 at the end</td></tr>
+          <tr><td>batch normalization layers added</td><td>dead every time, loss frozen at 5.799</td></tr>
+          <tr><td>pixels centered on 0 (−0.5…0.5 instead of 0…1)</td><td>learned in 3/3 runs</td></tr>
+          <tr><td>centered + batches of 8 instead of 4 (what the sketch uses)</td><td>learned in 5/5 runs, 17–26 of 30 new pictures right</td></tr>
+        </tbody>
+      </table>
+      <p>Centering is a tiny change (<code>/ 255 - 0.5</code>) that matters because of how SGD moves the weights. With every input between 0 and 1, every input is positive, so all the weights in a filter get pushed the same way on each step. Centered inputs can push in both directions. These were generated pictures, not my hand, so the real test is the loss line in the sketch: with 3 labels it should end well under 1.1, and the sketch warns when it doesn't.</p>
+    </div>
+  </section>
+
+  <section class="section">
+    <h2>Testing</h2>
+    <div class="content">
+      <p><b>Does the CNN learn through the real camera path?</b> Chrome can pretend a video file is the webcam. I generated a 6-second loop where the stem-hand side shows a big bright disc (labeled open), a small disc (fist) or nothing (none), with a marker in the corner saying which. The sketch collected 40 crops of each from the live camera path (mirror, right half, 64×64, centered), trained, then its live guesses were compared to the marker:</p>
+      <pre>Trained on 120 pictures · loss 0.81 → 0.000
+live guesses matching the clip: 29/30
+mean crop brightness: open 0.033 · fist −0.042 · none −0.058</pre>
+      <p>The brightness line proves the crop is the correct half: the discs only exist on the stem-hand side, and the crops get brighter with disc size. If I had cropped the wrong half, all three would read the same.</p>
+      <p><b>The plant, with real mouse and key events.</b> A script drove headless Chrome through every state (mouse mode: drag across the garden to pinch, hold O / F for the stem). Holding O for 4 s grew the stem 22 → 80 px and added leaves. Dragging right bloomed it to 0.95. Closing slowly to 0.4 plucked nothing. A snap plucked once, and the 6 petals fell and landed. Holding F for 2.2 s wilted it fully, and O brought it back. Log: <a href="https://github.com/wl3512-lab/ml-arts-pixel-lily/blob/main/tests/results/mouse-run-2026-10-28.txt">mouse-run-2026-10-28.txt</a>.</p>
+      <p><b>The rules.</b> 10 node tests on <code>lily-logic.js</code>: the pinch reads the same anywhere in the frame and at any distance, broken (NaN) hands are ignored, slow closing never plucks, snapping plucks exactly once and regrows, a snap from a closed flower does nothing, open grows up to a limit, a fist wilts without shrinking, and no hands means nothing changes.</p>
+      <p class="note">Not tested yet: a live run with my own two hands. Everything above uses a fake camera, the mouse, or generated pictures.</p>
+    </div>
+  </section>
+
+  <section class="section">
+    <h2>Try it</h2>
+    <div class="content">
+      <ol>
+        <li><a href="sketch/">Open the sketch</a> and click <b>Start camera</b>.</li>
+        <li>Right hand on the right side of the pink line. Hold <b>open</b> and wave your open palm around, then the same for <b>fist</b>, and <b>none</b> with no hand there (pinching with your left hand is fine). About 30 of each.</li>
+        <li><b>Train</b>, and watch the loss line drop below the faint coin-flip line.</li>
+        <li>Grow it with your palm, pinch it open with your left hand, snap to pluck, fist to wilt.</li>
+      </ol>
+      <p class="small">No camera? <b>Use mouse + keys</b>: drag across the garden to pinch (fast to the left to pluck), hold O to grow, F to wilt. <b>Save model</b> downloads the trained CNN, and <b>Load model…</b> brings it back without retraining.</p>
+    </div>
+  </section>
+
+  <section class="section">
+    <h2>Limits &amp; next</h2>
+    <div class="content">
+      <ul>
+        <li>The CNN learns my room, my lighting and my sleeves along with my hand. Someone else probably has to train their own, which is why training happens right on the page.</li>
+        <li>If I save a model trained on my hand into <code>sketch/model/</code>, the sketch loads it by itself, so a demo can skip training.</li>
+        <li>handPose could also tell open from fist using keypoints. Comparing that against the CNN on the same hand would show what learning from raw pixels gets right and wrong.</li>
+        <li>Next: more flowers, a different one per hand shape (a new label), and sending bloom and wilt to TouchDesigner like my Assignment 6.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="section">
+    <h2>Sources &amp; assistance</h2>
+    <div class="content">
+      <ul>
+        <li><a href="https://github.com/ml5js/Intro-ML-Arts-IMA-F26/tree/main/08-cnn">Week 8 materials</a>. The starting point is <a href="https://editor.p5js.org/jackbdu/sketches/7Y6VDvUO6">Training a Webcam Image Classifier with Convolutional Layers</a> by jackbdu. The first commit in the repository is that example unchanged.</li>
+        <li>Assigned reading: <a href="https://ujjwalkarn.me/2016/08/11/intuitive-explanation-convnets/">An Intuitive Explanation of Convolutional Neural Networks</a> by Ujjwal Karn</li>
+        <li><a href="https://docs.ml5js.org/#/reference/neural-network">ml5.neuralNetwork</a> and <a href="https://docs.ml5js.org/#/reference/handpose">ml5.handPose</a> references; the sketch pins ml5.js 1.4.0 and p5.js 1.11.10</li>
+        <li>Pixel font: <a href="https://fonts.google.com/specimen/Silkscreen">Silkscreen</a> by Jason Kottke (Google Fonts)</li>
+      </ul>
+      <p class="small"><b>AI assistance:</b> Claude (Anthropic), October 28, 2026, diagnosed why the class example only guessed one label, ran the training experiments, and wrote the sketch, the plant logic and its tests, the automated browser checks (including the generated camera clip), and this write-up. The lily, its two-hand controls and the pixel style are my idea. No live test with my own hands or completion of the assigned reading is claimed here.</p>
+    </div>
+  </section>
+
+  <footer>Lucy Liu · ML Arts Assignment 08 · <a href="sketch/">Run the sketch</a> · <a href="https://github.com/wl3512-lab/ml-arts-pixel-lily">Source repository</a></footer>
+</main>
 </body>
 </html>

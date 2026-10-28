@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Pixel Lily · Lucy Liu</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Silkscreen&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.11.10/lib/p5.min.js"></script>
+  <script src="https://unpkg.com/ml5@1.4.0/dist/ml5.min.js"></script>
+  <style>
+    :root{--bg:#1f1226;--panel:#2a1832e6;--line:#ffffff2b;--ink:#fff;--soft:#e9d3ee;--pink:#ff6fae;--pink-soft:#ffd6e8;--warn:#ffb3c7}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 system-ui,sans-serif;overflow:hidden}
+    main canvas{display:block;position:fixed;inset:0;z-index:0;image-rendering:pixelated}
+    #panel{position:fixed;left:20px;top:20px;z-index:1;width:360px;max-height:calc(100vh - 40px);overflow:auto;padding:16px 18px;background:var(--panel);border:1px solid var(--line);border-radius:12px;backdrop-filter:blur(14px)}
+    body.clean #panel{display:none}
+    h1,h2,.eyebrow{font-family:"Silkscreen",ui-monospace,monospace;font-weight:400}
+    .eyebrow{font-size:11px;letter-spacing:1px;color:var(--soft)}
+    h1{font-size:32px;line-height:1.05;margin:4px 0 8px;color:var(--pink-soft)}
+    h2{font-size:13px;letter-spacing:.5px;color:var(--pink);margin:16px 0 6px}
+    p{margin:6px 0;color:var(--soft)}
+    .small{font-size:12px}
+    .mono{font-family:ui-monospace,monospace;font-size:12px;white-space:pre-wrap}
+    .row{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+    button,.button{font:inherit;cursor:pointer;border:1px solid #ffffff45;border-radius:7px;padding:7px 11px;color:inherit;background:#ffffff12;touch-action:none;user-select:none;-webkit-user-select:none}
+    button:hover,.button:hover{background:#ffffff26}
+    button:disabled{opacity:.4;cursor:default}
+    button.primary{background:var(--pink-soft);color:#3a1430;border-color:var(--pink-soft)}
+    button.holding{background:var(--pink);border-color:var(--pink);color:#fff}
+    #labels{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+    #labels button{display:flex;flex-direction:column;align-items:flex-start;gap:2px}
+    .count{font:11px ui-monospace,monospace;color:var(--soft)}
+    #lossChart{width:100%;height:46px;display:block;background:#ffffff0d;border-radius:6px;margin-top:4px}
+    .error{color:var(--warn)!important}
+    #hint{position:fixed;right:16px;top:14px;z-index:1;font-size:11px;color:#ffffffa8}
+    @media(max-width:700px){#panel{top:auto;left:10px;right:10px;bottom:10px;width:auto;max-height:52vh;padding:14px}h1{font-size:26px}#hint{display:none}}
+  </style>
+</head>
+<body>
+  <section id="panel" aria-label="Pixel Lily controls">
+    <div class="eyebrow">ML Arts · Assignment 08</div>
+    <h1>Pixel Lily</h1>
+    <p>Your left hand pinches the lily open: the wider the pinch, the bigger the bloom. Snap the pinch shut to pluck the petals. Your right hand looks after the stem: an open palm grows it and adds leaves, a fist wilts it.</p>
+
+    <h2>1 · Camera</h2>
+    <div class="row">
+      <button id="startCamera" class="primary">Start camera</button>
+      <button id="useMouse">Use mouse + keys</button>
+    </div>
+    <p id="inputStatus" class="mono" role="status">No input yet.</p>
+
+    <h2>2 · Teach the stem hand (CNN)</h2>
+    <p class="small">Put your right hand on the right side of the pink line. Press and hold a button (or hold 1, 2 or 3) and move your hand around a little. Aim for 30+ of each. <b>none</b> = no hand on the right side.</p>
+    <div id="labels">
+      <button data-label="open" disabled>✋ open <span class="count" id="count-open">0</span></button>
+      <button data-label="fist" disabled>✊ fist <span class="count" id="count-fist">0</span></button>
+      <button data-label="none" disabled>∅ none <span class="count" id="count-none">0</span></button>
+    </div>
+    <div class="row">
+      <button id="train" class="primary" disabled>Train (T)</button>
+      <button id="clear" disabled>Clear examples</button>
+    </div>
+    <canvas id="lossChart" width="320" height="46" aria-label="Training loss per epoch"></canvas>
+    <p id="trainStatus" class="mono">Not trained.</p>
+    <div class="row">
+      <button id="save" disabled>Save model</button>
+      <label class="button" id="loadLabel">Load model…<input id="load" type="file" multiple accept=".json,.bin" hidden></label>
+    </div>
+
+    <h2>3 · Play</h2>
+    <p id="readout" class="mono"></p>
+    <p class="small">Mouse mode: drag across the garden to pinch (drag fast to the left to pluck), hold <b>O</b> to grow, <b>F</b> to wilt. <b>D</b> hides this panel.</p>
+  </section>
+  <div id="hint">D · panel</div>
+  <main></main>
+  <script src="lily-logic.js"></script>
+  <script src="sketch.js"></script>
+</body>
+</html>
