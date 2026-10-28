@@ -23,14 +23,14 @@ No camera: **Use mouse + keys**. Drag across the garden to pinch (fast to the le
 | --- | --- |
 | Stem hand | Built on the class example [Training a Webcam Image Classifier with Convolutional Layers](https://editor.p5js.org/jackbdu/sketches/7Y6VDvUO6). `video.get()` of the right half (p5's `flipped: true` mirrors the real pixels) → 64×64×4 → pixels centered to −0.5…0.5 → ml5 `imageClassification` (conv 8@5×5 → max pool → conv 16@5×5 → max pool → dense softmax, 12,139 weights) → open / fist / none. 64 epochs, batch size 8, SGD at ml5's default 0.02. Guesses under 60% confidence count as none. |
 | Flower hand | `ml5.handPose({ maxHands: 2, flipped: true })`. The hand whose wrist is on the left half. Pinch = thumb tip to index tip ÷ wrist to middle knuckle, mapped 0.2–1.0 → 0–1. A snap (≥ 0.55 to ≤ 0.08 within 0.4 s) plucks; closing slowly just closes the flower. |
-| Plant | `sketch/lily-logic.js`, with no p5 or ml5 in it, so node can test it: stem height, a leaf every 15 px, wilt, smoothed bloom, pluck and a 3 s regrow, the sun, 3 little lilies on the stem, a 6-lily meadow that sprouts one after another once the stem is 60 px, fallen petals that dissolve after 10 s, and the species cycle: a fist that fully wilts the garden marks it dead, and the next open palm restarts it as a sprout of the next of 6 kinds. Until the CNN is trained, handPose fingertip reach stands in for the stem hand. |
+| Plant | `sketch/lily-logic.js`, with no p5 or ml5 in it, so node can test it: stem height, a leaf every 15 px, wilt, smoothed bloom, pluck and a 3 s regrow, the sun, 3 little lilies on the stem, a 6-lily meadow that sprouts one after another once the stem is 60 px, fallen petals that dissolve after 10 s, and the species cycle: a fist that fully wilts the garden kills it (every flower drops its petals, seed pods stay, "~ open your hand ~" shows), and the next open palm restarts it as a sprout of the next of 6 kinds. Until the CNN is trained, handPose fingertip reach stands in for the stem hand. |
 | Pixels | Drawn one pixel at a time into a 120×150 buffer, scaled up with no smoothing. Ordered (Bayer) dithering for the sky and soil. |
 
 Versions are pinned: **p5.js 1.11.10** and **ml5.js 1.4.0**. The first two commits are the unchanged class example and the first fixes, so the history shows where it started.
 
 ## Verification
 
-- `node --test tests/lily-logic.test.cjs`: 19 tests, all passing.
+- `node --test tests/lily-logic.test.cjs`: 20 tests, all passing.
 - `tests/browser/mouse-run.sh <url> [shots]`: real mouse and key events in headless Chrome through grow → bloom → slow close (no pluck) → snap (one pluck, 6 petals fall and land) → wilt → revive. Log: `tests/results/mouse-run-2026-10-28.txt`.
 - `tests/browser/camera-learn-run.sh <url> <clip.y4m>`: Chrome's fake camera plays a clip from `make-shapes-camera.py` (big disc / small disc / nothing on the stem-hand side). 120 crops through the real camera path, trained: loss 0.81 → 0.000, live guesses matched the clip 29/30, and the crop brightness rises with disc size, which shows the crop is the correct half. Log: `tests/results/camera-learn-run-2026-10-28.txt`.
 - `tests/browser/camera-run.sh <url> [shots]`: plumbing with Chrome's default test pattern (handPose loads, hold-to-record, train, classification keeps running).

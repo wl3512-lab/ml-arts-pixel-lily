@@ -237,3 +237,19 @@ test("the six kinds come round in order, then start over", () => {
   assert.deepEqual(seen, ["lily", "tulip", "daisy", "sunflower", "rose", "morning glory", "lily"]);
   assert.equal(p.deaths, 6);
 });
+
+test("dying is announced once, the moment the garden is fully wilted", () => {
+  const p = L.createPlant();
+  stepCount(p, { pinch: null, stem: "open" }, 3);
+  let died = 0;
+  let at = null;
+  for (let i = 0; i < 120; i++) {
+    const e = L.step(p, { pinch: null, stem: "fist" }, 1 / 30);
+    if (e.died) {
+      died++;
+      at = p.wilt;
+    }
+  }
+  assert.equal(died, 1);
+  assert.equal(at, 1);
+});

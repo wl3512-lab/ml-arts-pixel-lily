@@ -152,11 +152,11 @@
     plant.meadow = MEADOW.map(() => 0);
   }
 
-  // advance the plant by dt seconds. Returns { plucked, reborn } so the
-  // drawing code can spawn falling petals and name the new flower.
+  // advance the plant by dt seconds. Returns { plucked, died, reborn } so
+  // the drawing code can drop petals and name the new flower.
   function step(plant, input, dt) {
     plant.time += dt;
-    const events = { plucked: false, reborn: false };
+    const events = { plucked: false, died: false, reborn: false };
 
     if (input.stem === "open" && plant.dead) {
       rebirth(plant);
@@ -186,6 +186,7 @@
       if (plant.wilt >= 1 && !plant.dead) {
         plant.dead = true;
         plant.deaths += 1;
+        events.died = true;
       }
       plant.sun = Math.max(0, plant.sun - SUN_FADE_FIST * dt);
     } else {

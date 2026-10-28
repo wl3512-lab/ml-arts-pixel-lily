@@ -59,6 +59,7 @@ let falling = [];
 let fallen = [];
 let lastHead = null; // where the main flower was drawn, so plucked petals start there
 let speciesShownAt = -Infinity; // when the current kind of flower was announced
+let frameHeads = []; // every flower head drawn last frame, so they can all drop their petals
 
 let garden, gctx, skyLayer;
 let gardenRect = { x: 0, y: 0, s: 1 };
@@ -372,10 +373,11 @@ function draw() {
   lastInput = readInputs();
   const events = LilyLogic.step(plant, lastInput, dt);
   if (events.plucked) dropPetals();
-  if (events.reborn) {
-    dropPetals(); // the dead flower's petals fall as the new sprout comes up
-    speciesShownAt = millis();
+  if (events.died) {
+    // dead: every flower drops its petals and only seed pods stay on the stems
+    frameHeads.forEach((h, i) => dropPetals(h, i === 0 ? 6 : 3));
   }
+  if (events.reborn) speciesShownAt = millis();
   updatePetals(dt);
 
   renderGarden();
@@ -561,6 +563,7 @@ function px(x, y, c) {
 }
 
 function renderGarden() {
+  frameHeads = [];
   gctx.drawImage(skyLayer.elt, 0, 0);
   drawSun(plant.sun);
   drawSparkles();
@@ -614,7 +617,10 @@ function renderGarden() {
 
   const top = pts[pts.length - 1];
   const head = drawHead(p.species, top.x, top.y, top.ang, p, w);
-  if (head) lastHead = head;
+  if (head) {
+    lastHead = head;
+    frameHeads.unshift(frameHeads.pop()); // main flower first: it drops the most petals
+  }
 
   const now = millis() / 1000;
   for (const f of fallen) {
@@ -851,8 +857,12 @@ const LOOKS = [
 // every flower head goes through here: the main one, the little ones on the
 // stem and the meadow. Returns where it was drawn, for plucked petals.
 function drawHead(species, hx, hy, ang, head, wilt, size = 1) {
+  if (plant.dead) {
+    drawPod(hx, hy, size);
+    return null;
+  }
   const look = LOOKS[species];
-  if (!look) return drawFlower(hx, hy, ang, head, wilt, size);
+  if (!look) return keepHead(drawFlower(hx, hy, ang, head, wilt, size));
   if (head.bud <= 0.02) return null;
   const b = head.bloom * (1 - 0.55 * wilt);
   let outer = null;
@@ -861,7 +871,23 @@ function drawHead(species, hx, hy, ang, head, wilt, size = 1) {
     outer = outer || drawn;
   }
   if (look.disc && b > 0.2) drawDisc(hx, hy, look.disc.r * size * LOOK_SCALE * (0.4 + 0.6 * b), look.disc, wilt);
-  return outer;
+  return keepHead(outer);
+}
+
+function keepHead(h) {
+  if (h) frameHeads.push(h);
+  return h;
+}
+
+// what's left of a flower once the garden has died
+function drawPod(hx, hy, size) {
+  const r = Math.max(1, Math.round(1.5 * size));
+  for (let dy = -r; dy <= r; dy++) {
+    for (let dx = -r; dx <= r; dx++) {
+      if (dx * dx + dy * dy > r * r + 0.5) continue;
+      px(hx + dx, hy + dy, dx + dy < 0 ? PAL.dead : PAL.deadDark);
+    }
+  }
 }
 
 // n petals that start bunched into a bud along the stem and spread out as
@@ -928,8 +954,9 @@ function drawDisc(cx, cy, r, disc, wilt) {
 // names the new kind for a few seconds after it sprouts
 function drawSpeciesName() {
   const age = millis() - speciesShownAt;
-  if (age > 3500) return;
-  const alpha = 255 * Math.min(1, (3500 - age) / 800);
+  if (!plant.dead && age > 3500) return;
+  const alpha = plant.dead ? 160 + 95 * Math.sin(millis() / 300) : 255 * Math.min(1, (3500 - age) / 800);
+  const words = plant.dead ? "open your hand" : LilyLogic.SPECIES[plant.species];
   push();
   textFont("Silkscreen");
   textSize(Math.max(16, gardenRect.s * 5));
@@ -938,26 +965,26 @@ function drawSpeciesName() {
   const x = gardenRect.x + (GW * gardenRect.s) / 2;
   const y = gardenRect.y + gardenRect.s * 6;
   fill(255, 255, 255, alpha * 0.8);
-  text(`~ ${LilyLogic.SPECIES[plant.species]} ~`, x + 2, y + 2);
+  text(`~ ${words} ~`, x + 2, y + 2);
   fill(58, 20, 48, alpha);
-  text(`~ ${LilyLogic.SPECIES[plant.species]} ~`, x, y);
+  text(`~ ${words} ~`, x, y);
   pop();
 }
 
-function dropPetals() {
-  if (!lastHead) return;
-  for (let k = 0; k < 6; k++) {
-    const a = lastHead.ang + OPEN_SPREAD[k];
+function dropPetals(from = lastHead, count = 6) {
+  if (!from) return;
+  for (let k = 0; k < count; k++) {
+    const a = from.ang + OPEN_SPREAD[Math.floor((k * 6) / count)];
     falling.push({
-      x: lastHead.x + Math.cos(a) * 4,
-      y: lastHead.y + Math.sin(a) * 4,
+      x: from.x + Math.cos(a) * 4,
+      y: from.y + Math.sin(a) * 4,
       vx: Math.cos(a) * 10 + (Math.random() - 0.5) * 6,
       vy: Math.sin(a) * 6 - 8,
       ang: a,
       spin: (Math.random() - 0.5) * 6,
       phase: Math.random() * 6,
-      len: Math.max(6, lastHead.len * 0.55),
-      cols: lastHead.cols,
+      len: Math.max(6, from.len * 0.55),
+      cols: from.cols,
       seed: 10 + k,
     });
   }
@@ -978,7 +1005,7 @@ function updatePetals(dt) {
   }
   fallen = fallen.filter((f) => LilyLogic.petalDissolve(t - f.landed) < 1);
   falling = falling.filter((f) => f.y < GROUND - 1 && f.x > -10 && f.x < GW + 10);
-  if (fallen.length > 36) fallen.splice(0, fallen.length - 36);
+  if (fallen.length > 60) fallen.splice(0, fallen.length - 60); // a whole dead garden is about 33
 }
 
 // for the automated browser checks
